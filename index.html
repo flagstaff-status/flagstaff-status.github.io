@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Flagstaff Park Status</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    min-height: 100vh;
+    background: #fafafa;
+    display: flex;
+    justify-content: center;
+  }
+  .app {
+    width: 100%;
+    max-width: 420px;
+    min-height: 100vh;
+    background: white;
+    display: flex;
+    flex-direction: column;
+    padding: 32px 24px 24px;
+    transition: background 0.4s ease;
+  }
+  .app.clear { background: #cdf3da; }
+  .app.alert { background: #fad0d0; }
+  .park-name {
+    text-align: center;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    color: #6b7280;
+    margin-bottom: 28px;
+  }
+  .status-circle {
+    width: 140px;
+    height: 140px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 64px;
+    margin: 0 auto 16px;
+    transition: background 0.3s ease;
+  }
+  .status-circle.clear { background: #e6f7ec; }
+  .status-circle.alert { background: #fdecec; }
+  .status-word {
+    text-align: center;
+    font-size: 32px;
+    font-weight: 800;
+    letter-spacing: 1px;
+    margin-bottom: 8px;
+  }
+  .status-word.clear { color: #1fa855; }
+  .status-word.alert { color: #d64545; }
+  .status-sub {
+    text-align: center;
+    font-size: 15px;
+    color: #6b7280;
+    margin-bottom: 36px;
+  }
+  .action-btn {
+    display: block;
+    width: 100%;
+    padding: 20px;
+    border: none;
+    border-radius: 16px;
+    font-size: 18px;
+    font-weight: 700;
+    color: white;
+    cursor: pointer;
+    margin-bottom: 36px;
+    -webkit-tap-highlight-color: transparent;
+    transition: transform 0.1s ease;
+  }
+  .action-btn:active { transform: scale(0.97); }
+  .action-btn.to-alert { background: #d64545; }
+  .action-btn.to-clear { background: #1fa855; }
+
+  .history-section { flex: 1; }
+  .history-header {
+    font-size: 13px;
+    font-weight: 700;
+    color: #9ca3af;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #eee;
+  }
+  .history-empty {
+    text-align: center;
+    color: #b0b3b8;
+    font-size: 14px;
+    padding: 20px 0;
+  }
+  .history-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 14px;
+    margin-bottom: 8px;
+    border-radius: 10px;
+    background: rgba(255,255,255,0.75);
+    font-size: 14px;
+  }
+  .history-item .dot { font-size: 16px; }
+  .history-item .label { flex: 1; color: #374151; font-weight: 600; }
+  .history-item .time { color: #9ca3af; font-size: 13px; }
+
+  /* Modal */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.45);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    z-index: 10;
+  }
+  .modal-overlay.show { display: flex; }
+  .modal-box {
+    background: white;
+    border-radius: 18px;
+    padding: 28px 22px;
+    width: 100%;
+    max-width: 340px;
+    text-align: center;
+  }
+  .modal-title {
+    font-size: 17px;
+    font-weight: 700;
+    color: #111827;
+    margin-bottom: 24px;
+    line-height: 1.4;
+  }
+  .modal-actions {
+    display: flex;
+    gap: 10px;
+  }
+  .modal-btn {
+    flex: 1;
+    padding: 14px 8px;
+    border-radius: 12px;
+    border: none;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .modal-btn.cancel { background: #f0f0f0; color: #444; }
+  .modal-btn.confirm { background: #d64545; color: white; }
+</style>
+</head>
+<body>
+<div class="app" id="appContainer">
+  <div class="park-name">FLAGSTAFF GARDENS</div>
+
+  <div class="status-circle" id="statusCircle">🟢</div>
+  <div class="status-word" id="statusWord">CLEAR</div>
+  <div class="status-sub" id="statusSub">No recent alerts</div>
+
+  <button class="action-btn" id="actionBtn">🔴 RANGER</button>
+
+  <div class="history-section">
+    <div class="history-header" id="historyHeader">RECENT HISTORY</div>
+    <div id="historyList"><div class="history-empty">No reports yet today</div></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal-box">
+    <div class="modal-title">Are you sure? 🔴<br>Ranger currently present?</div>
+    <div class="modal-actions">
+      <button class="modal-btn cancel" id="modalCancel">CANCEL</button>
+      <button class="modal-btn confirm" id="modalConfirm">YES, REPORT ALERT</button>
+    </div>
+  </div>
+</div>
+
+<!-- Firebase (free tier) — powers the shared live status across everyone's phones -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getDatabase, ref, push, query, limitToLast, onValue } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+// ⬇️ PASTE YOUR FIREBASE CONFIG HERE (from Firebase Console > Project Settings > Your apps)
+const firebaseConfig = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+  databaseURL: "https://YOUR_PROJECT_ID-default-rtdb.firebaseio.com",
+  projectId: "YOUR_PROJECT_ID",
+  storageBucket: "YOUR_PROJECT_ID.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId: "YOUR_APP_ID"
+};
+
+const firebaseApp = initializeApp(firebaseConfig);
+const db = getDatabase(firebaseApp);
+const historyRef = ref(db, 'history');
+
+window.__pushHistoryEvent = (status) => {
+  push(historyRef, { status, updatedAt: Date.now() });
+};
+
+const recentQuery = query(historyRef, limitToLast(30));
+onValue(recentQuery, (snapshot) => {
+  const items = [];
+  snapshot.forEach((child) => items.push(child.val()));
+  items.reverse(); // newest first
+  window.__onHistoryUpdate(items);
+});
+</script>
+
+<script>
+const MAX_HISTORY = 30;
+
+const appContainer = document.getElementById('appContainer');
+const statusCircle = document.getElementById('statusCircle');
+const statusWord = document.getElementById('statusWord');
+const statusSub = document.getElementById('statusSub');
+const actionBtn = document.getElementById('actionBtn');
+const historyHeader = document.getElementById('historyHeader');
+const historyList = document.getElementById('historyList');
+const modalOverlay = document.getElementById('modalOverlay');
+const modalCancel = document.getElementById('modalCancel');
+const modalConfirm = document.getElementById('modalConfirm');
+
+let currentHistory = [];
+
+function timeAgo(ts) {
+  const diff = Date.now() - ts;
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return mins + ' minute' + (mins === 1 ? '' : 's') + ' ago';
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return hours + ' hour' + (hours === 1 ? '' : 's') + ' ago';
+  const days = Math.floor(hours / 24);
+  return days + ' day' + (days === 1 ? '' : 's') + ' ago';
+}
+
+function formatTime(ts) {
+  const d = new Date(ts);
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function formatHeaderDate() {
+  const d = new Date(); // always today's real date, rolls over automatically
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = d.toLocaleString([], { month: 'short' });
+  return `RECENT HISTORY · ${day}/${month}`;
+}
+
+function render() {
+  const latest = currentHistory[0];
+
+  if (!latest || latest.status === 'CLEAR') {
+    appContainer.className = 'app clear';
+    statusCircle.className = 'status-circle clear';
+    statusCircle.textContent = '🟢';
+    statusWord.className = 'status-word clear';
+    statusWord.textContent = 'CLEAR';
+    statusSub.textContent = 'No recent alerts';
+    actionBtn.className = 'action-btn to-alert';
+    actionBtn.textContent = '🔴 RANGER';
+  } else {
+    appContainer.className = 'app alert';
+    statusCircle.className = 'status-circle alert';
+    statusCircle.textContent = '🔴';
+    statusWord.className = 'status-word alert';
+    statusWord.textContent = 'ALERT';
+    statusSub.textContent = 'Ranger reported ' + timeAgo(latest.updatedAt);
+    actionBtn.className = 'action-btn to-clear';
+    actionBtn.textContent = '🟢 CLEAR';
+  }
+
+  historyHeader.textContent = formatHeaderDate();
+
+  if (!currentHistory.length) {
+    historyList.innerHTML = '<div class="history-empty">No reports yet today</div>';
+  } else {
+    historyList.innerHTML = currentHistory.slice(0, MAX_HISTORY).map(item => {
+      const dot = item.status === 'CLEAR' ? '🟢' : '🔴';
+      const label = item.status === 'CLEAR' ? 'Clear' : 'Ranger reported';
+      return `<div class="history-item">
+        <span class="dot">${dot}</span>
+        <span class="label">${label}</span>
+        <span class="time">${formatTime(item.updatedAt)}</span>
+      </div>`;
+    }).join('');
+  }
+}
+
+// Called automatically every time anyone's tap changes the shared history —
+// no polling needed, this is a live push from Firebase.
+window.__onHistoryUpdate = (items) => {
+  currentHistory = items.slice(0, MAX_HISTORY);
+  render();
+};
+
+function addEvent(status) {
+  window.__pushHistoryEvent(status);
+}
+
+actionBtn.addEventListener('click', () => {
+  const latest = currentHistory[0];
+  const goingToAlert = !latest || latest.status === 'CLEAR';
+  if (goingToAlert) {
+    modalOverlay.classList.add('show');
+  } else {
+    addEvent('CLEAR');
+  }
+});
+
+modalCancel.addEventListener('click', () => modalOverlay.classList.remove('show'));
+modalConfirm.addEventListener('click', () => {
+  modalOverlay.classList.remove('show');
+  addEvent('ALERT');
+});
+
+render();
+setInterval(render, 30000); // keeps "X minutes ago" and the date header fresh even with no new taps
+</script>
+</body>
+</html>
