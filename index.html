@@ -201,7 +201,10 @@ const db = getDatabase(firebaseApp);
 const historyRef = ref(db, 'history');
 
 window.__pushHistoryEvent = (status) => {
-  push(historyRef, { status, updatedAt: Date.now() });
+  console.log('Attempting to push status:', status);
+  push(historyRef, { status, updatedAt: Date.now() })
+    .then(() => console.log('Push succeeded:', status))
+    .catch((err) => console.error('Push FAILED:', err));
 };
 
 const recentQuery = query(historyRef, limitToLast(30));
@@ -306,6 +309,7 @@ function addEvent(status) {
 actionBtn.addEventListener('click', () => {
   const latest = currentHistory[0];
   const goingToAlert = !latest || latest.status === 'CLEAR';
+  console.log('Button clicked. Current latest status:', latest ? latest.status : 'none', '| Going to alert?', goingToAlert);
   if (goingToAlert) {
     modalOverlay.classList.add('show');
   } else {
