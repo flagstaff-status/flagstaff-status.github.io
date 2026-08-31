@@ -209,10 +209,14 @@ window.__pushHistoryEvent = (status) => {
 
 const recentQuery = query(historyRef, limitToLast(30));
 onValue(recentQuery, (snapshot) => {
+  console.log('Received data update from Firebase. Snapshot exists?', snapshot.exists());
   const items = [];
   snapshot.forEach((child) => items.push(child.val()));
   items.reverse(); // newest first
+  console.log('Parsed items:', items);
   window.__onHistoryUpdate(items);
+}, (error) => {
+  console.error('READ FAILED (likely a Firebase rules issue):', error);
 });
 </script>
 
