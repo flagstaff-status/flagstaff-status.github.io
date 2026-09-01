@@ -183,7 +183,7 @@
 <!-- Firebase (free tier) — powers the shared live status across everyone's phones -->
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getDatabase, ref, push, get, onValue } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+import { getDatabase, ref, push, get } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
 // ⬇️ PASTE YOUR FIREBASE CONFIG HERE (from Firebase Console > Project Settings > Your apps)
 const firebaseConfig = {
@@ -207,6 +207,9 @@ function snapshotToItems(snapshot) {
   return items;
 }
 
+// Deliberately NOT using onValue() here. An active listener on this same ref
+// caused get() calls to reuse its (apparently stuck) cached snapshot instead
+// of doing a fresh server round-trip. Pure polling avoids that entirely.
 async function fetchLatest(label) {
   try {
     const snapshot = await get(historyRef);
@@ -223,22 +226,12 @@ window.__pushHistoryEvent = (status) => {
   push(historyRef, { status, updatedAt: Date.now() })
     .then(() => {
       console.log('Push succeeded:', status);
-      fetchLatest('Post-write refresh'); // immediately re-fetch so the tapper always sees their own update
+      fetchLatest('Post-write refresh');
     })
     .catch((err) => console.error('Push FAILED:', err));
 };
 
-// Keep the live listener (works for some clients/networks)...
-onValue(historyRef, (snapshot) => {
-  console.log('Live listener fired. Snapshot exists?', snapshot.exists());
-  window.__onHistoryUpdate(snapshotToItems(snapshot));
-}, (error) => {
-  console.error('READ FAILED (likely a Firebase rules issue):', error);
-});
-
-// ...and ALSO poll every 5 seconds as a safety net, in case the live
-// listener silently stalls after its first event (observed in testing).
-setInterval(() => fetchLatest('Poll'), 5000);
+setInterval(() => fetchLatest('Poll'), 4000);
 fetchLatest('Initial load');
 </script>
 
