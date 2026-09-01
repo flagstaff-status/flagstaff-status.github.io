@@ -183,7 +183,7 @@
 <!-- Firebase (free tier) — powers the shared live status across everyone's phones -->
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getDatabase, ref, push, onValue } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+import { getDatabase, ref, push, get, onValue } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
 // ⬇️ PASTE YOUR FIREBASE CONFIG HERE (from Firebase Console > Project Settings > Your apps)
 const firebaseConfig = {
@@ -200,26 +200,46 @@ const firebaseApp = initializeApp(firebaseConfig);
 const db = getDatabase(firebaseApp);
 const historyRef = ref(db, 'history');
 
-window.__pushHistoryEvent = (status) => {
-  console.log('Attempting to push status:', status);
-  push(historyRef, { status, updatedAt: Date.now() })
-    .then(() => console.log('Push succeeded:', status))
-    .catch((err) => console.error('Push FAILED:', err));
-};
-
-// Listen to the whole history node directly (no query wrapper) and sort client-side.
-// This avoids a quirk where a limitToLast() query listener stopped receiving
-// updates after rapid successive writes in the same session.
-onValue(historyRef, (snapshot) => {
-  console.log('Received data update from Firebase. Snapshot exists?', snapshot.exists());
+function snapshotToItems(snapshot) {
   const items = [];
   snapshot.forEach((child) => items.push(child.val()));
   items.sort((a, b) => b.updatedAt - a.updatedAt); // newest first
-  console.log('Parsed items (raw):', JSON.stringify(items));
-  window.__onHistoryUpdate(items);
+  return items;
+}
+
+async function fetchLatest(label) {
+  try {
+    const snapshot = await get(historyRef);
+    const items = snapshotToItems(snapshot);
+    console.log(label, '— fetched items:', JSON.stringify(items));
+    window.__onHistoryUpdate(items);
+  } catch (err) {
+    console.error(label, '— fetch FAILED:', err);
+  }
+}
+
+window.__pushHistoryEvent = (status) => {
+  console.log('Attempting to push status:', status);
+  push(historyRef, { status, updatedAt: Date.now() })
+    .then(() => {
+      console.log('Push succeeded:', status);
+      fetchLatest('Post-write refresh'); // immediately re-fetch so the tapper always sees their own update
+    })
+    .catch((err) => console.error('Push FAILED:', err));
+};
+
+// Keep the live listener (works for some clients/networks)...
+onValue(historyRef, (snapshot) => {
+  console.log('Live listener fired. Snapshot exists?', snapshot.exists());
+  window.__onHistoryUpdate(snapshotToItems(snapshot));
 }, (error) => {
   console.error('READ FAILED (likely a Firebase rules issue):', error);
 });
+
+// ...and ALSO poll every 5 seconds as a safety net, in case the live
+// listener silently stalls after its first event (observed in testing).
+setInterval(() => fetchLatest('Poll'), 5000);
+fetchLatest('Initial load');
 </script>
 
 <script>
