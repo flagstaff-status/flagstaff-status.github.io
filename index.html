@@ -183,7 +183,7 @@
 <!-- Firebase (free tier) — powers the shared live status across everyone's phones -->
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getDatabase, ref, push, query, limitToLast, onValue } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+import { getDatabase, ref, push, onValue } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
 // ⬇️ PASTE YOUR FIREBASE CONFIG HERE (from Firebase Console > Project Settings > Your apps)
 const firebaseConfig = {
@@ -207,12 +207,14 @@ window.__pushHistoryEvent = (status) => {
     .catch((err) => console.error('Push FAILED:', err));
 };
 
-const recentQuery = query(historyRef, limitToLast(30));
-onValue(recentQuery, (snapshot) => {
+// Listen to the whole history node directly (no query wrapper) and sort client-side.
+// This avoids a quirk where a limitToLast() query listener stopped receiving
+// updates after rapid successive writes in the same session.
+onValue(historyRef, (snapshot) => {
   console.log('Received data update from Firebase. Snapshot exists?', snapshot.exists());
   const items = [];
   snapshot.forEach((child) => items.push(child.val()));
-  items.reverse(); // newest first
+  items.sort((a, b) => b.updatedAt - a.updatedAt); // newest first
   console.log('Parsed items (raw):', JSON.stringify(items));
   window.__onHistoryUpdate(items);
 }, (error) => {
